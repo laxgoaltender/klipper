@@ -113,6 +113,7 @@ class PrinterLCD:
             self.screen_update_event)
         self.redraw_request_pending = False
         self.redraw_time = 0.
+        self.do_display_redraw = True
         # Register g-code commands
         gcode = self.printer.lookup_object("gcode")
         gcode.register_mux_command('SET_DISPLAY_GROUP', 'DISPLAY', name,
@@ -121,6 +122,10 @@ class PrinterLCD:
         if name == 'display':
             gcode.register_mux_command('SET_DISPLAY_GROUP', 'DISPLAY', None,
                                        self.cmd_SET_DISPLAY_GROUP)
+
+        gcode.register_mux_command('SET_DISPLAY_STATE', 'DISPLAY', None,
+                                   self.cmd_SET_DISPLAY_STATE,
+                                   desc=self.cmd_SET_DISPLAY_STATE_help)
     def get_dimensions(self):
         return self.lcd_chip.get_dimensions()
     # Configurable display
@@ -243,6 +248,22 @@ class PrinterLCD:
         if new_dg is None:
             raise gcmd.error("Unknown display_data group '%s'" % (group,))
         self.show_data_group = new_dg
+    cmd_SET_DISPLAY_STATE_help = "Turn display off and on"
+    def cmd_SET_DISPLAY_STATE(self, gcmd):
+        state = gcmd.get('STATE')
+        if state == "OFF":
+            if self.do_display_redraw:
+                self.reactor.unregister_timer(self.screen_update_timer)
+                self.lcd_chip.clear()
+                self.lcd_chip.flush()
+                self.do_display_redraw = False
+        elif state == "ON":
+            if not self.do_display_redraw:
+                self.screen_update_timer = self.reactor.register_timer(self.screen_update_event)
+                self.reactor.update_timer(self.screen_update_timer, self.reactor.NOW)
+                self.do_display_redraw = True
+        else:
+            raise gcmd.error("Unrecognized state requested")
 
 def load_config(config):
     return PrinterLCD(config)
